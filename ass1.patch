@@ -1,0 +1,38 @@
+diff --git a/reader.ml b/reader.ml
+index 32445c2..504c28d 100644
+--- a/reader.ml
++++ b/reader.ml
+@@ -29,7 +29,8 @@ let rec sexpr_eq s1 s2 =
+   | Pair(car1, cdr1), Pair(car2, cdr2) -> (sexpr_eq car1 car2) && (sexpr_eq cdr1 cdr2)
+   | _ -> false;;
+ 
+-module Reader: sig
++module Reader
++: sig
+   val read_sexprs : string -> sexpr list
+ end
+ = struct
+@@ -42,5 +43,13 @@ let normalize_scheme_symbol str =
+ 
+ 
+ let read_sexprs string = raise X_not_yet_implemented;;
+-  
+ end;; (* struct Reader *)
++
++let make_paired nt_left nt_right nt =
++  let nt = caten nt_left nt in
++  let nt = pack nt (fun (_,d) -> d) in
++  let nt = caten nt nt_right in
++  pack nt (fun (d,_) -> d;;
++
++(*nt_whitespace*)
++let nt_whitespace = star (char ' ');;
+diff --git a/readme.txt b/readme.txt
+index e69de29..dbd10be 100644
+--- a/readme.txt
++++ b/readme.txt
+@@ -0,0 +1,4 @@
++ a) Or Kalev 305571390 
++b) Ittai Corem 302240627 
++ 
++A statement asserting that the code you are submitting is your own work, thatyou did not use code found on the Internet or given to you by someone other than the teachingstaff or your partner for the assignment.
