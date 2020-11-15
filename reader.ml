@@ -127,6 +127,18 @@ let nt_string =
     let nt = pack nt (fun (_,ch) -> Char ch) in
     make_spaced nt;;
 
+(*3.3.6*)
+let nt_nil= 
+let left_bracket = char '(' in
+let right_bracket = char ')' in
+let nt = caten nt_whitespaces (caten left_bracket nt_whitespaces) in
+let nt = pack nt (fun (_,x) -> x) in
+let nt = caten nt nt_line_comment in
+let nt = pack nt (fun(_,x) -> x) in
+let nt = caten nt (caten nt_whitespaces right_bracket) in
+let nt = pack nt (fun(x) -> Nil) in
+make_spaced nt;;
+
 
 
 
