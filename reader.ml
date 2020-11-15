@@ -85,9 +85,30 @@ let nt_boolean =
   let bool_false = pack hashtag_false (fun (f) -> false) in
   let nt = disj bool_true bool_false in
   let nt = pack nt (fun (x) -> (Bool x)) in
-  nt;;
+  make_spaced nt;;
 
 (*3.3.2*)
+
+
+(*3.3.4*)
+let nt_string = 
+  let quote = char (char_of_int 34) in
+  let string_char = diff nt_any (disj (char (char_of_int 92)) (char (char_of_int 34))) in
+  let meta_chars = disj_list [
+    pack (word "\\r") (fun(_) -> (char_of_int 13));
+    pack (word "\\n") (fun(_) -> (char_of_int 10));
+    pack (word "\\t") (fun(_) -> (char_of_int 9));
+    pack (word "\\f") (fun(_) -> (char_of_int 12));
+    pack (word "\\\\") (fun(_) -> (char_of_int 92));
+    pack (word "\\\"") (fun(_) -> (char_of_int 34));
+  ] in
+  let string = disj string_char meta_chars in
+  let nt = caten quote (star(string)) in
+  let nt = pack nt (fun (_,s) -> s) in
+  let nt = caten nt quote in 
+  let nt = pack nt (fun (s,_)-> (String(list_to_string s))) in 
+   (* let nt = pack nt (fun(s))  *)
+  make_spaced nt;;
 
 (*char list -> sexpr * char list = <fun> *)
 (*3.3.5*)
@@ -102,11 +123,12 @@ let nt_boolean =
       pack (word_ci "page") (fun(_) -> (char_of_int 12));
       pack (word_ci "space") (fun(_) -> (char_of_int 32));
     ] in
-    let nt = caten char_start (disj named_char visible_char) in 
-    let nt = pack nt (fun (_,ch) -> (Char ch)) in
-    nt;;
+    let nt = caten char_start (disj named_char visible_char) in  
+    let nt = pack nt (fun (_,ch) -> Char ch) in
+    make_spaced nt;;
 
 
 
 
 let test_string nt str = let (e, s) = (nt (string_to_list str)) in (e, (Printf.sprintf "->[%s]" (list_to_string s)));;
+
