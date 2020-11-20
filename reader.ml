@@ -132,6 +132,8 @@ let nt_float =
    Number (Float (float_of_string ((string_of_int int) ^ "." ^ (string_of_int natural))))) in
   nt;;
 
+  let nt_number = disj_list [nt_float; nt_fraction; nt_integer];;
+
 
 
 
@@ -151,6 +153,7 @@ let nt_symbol =
   let scpsc = pack (caten symbol_char psc) (fun (e, es) -> (e :: es))  in
   let nt = pack (caten symbol_char_not_dot nt_epsilon) (fun (e, es) -> (e :: es)) in
   let nt = (disj scpsc nt) in 
+  let nt = pack nt (fun (e) -> Symbol (list_to_string e)) in
    nt;;  
 
 
@@ -193,10 +196,11 @@ let nt_string =
     let nt = pack nt (fun (_,ch) -> Char ch) in
     make_spaced nt;;
 
+
+(*3.3.6*)
 let left_bracket = make_paired nt_whitespaces nt_whitespaces (char '(');;
 let right_bracket = make_paired nt_whitespaces nt_whitespaces (char ')');;
 
-(*3.3.6*)
 let nt_nil =
   let nt = caten left_bracket (star(nt_line_comment)) in
   (* let nt = pack nt (fun (_,x) -> x) in *)
@@ -206,8 +210,95 @@ let nt_nil =
   let nt = pack nt (fun (_) -> Nil) in
   nt;;
 
+(* 3.3.7 *)
+(* let rec nt_list s  =  *)
+  (* let nt =  make_brackets (pack (star sexpr_blocks) (fun x -> List.fold_right
+    (fun nt1 nt2 ->
+    Pair(nt1 nt2)
+    s
+    Nil;;))) in
+  nt;; *)
+
+(* let nt = pack (make_brackets (star sexpr_blocks)) (fun (_,(s._)) -> match s with *)
+(* | [] -> Nil *)
+(* | lll -> List.fold_right (fun s1 s2 -> Pair (s1,s2)) lll Nil) in *)
+(* nt;; *)
+  
+  (* match s with *)
+  (* | [] -> [] *)
+  (* | e::s -> make_brackets sexpr_blocks;; *)
+  (* let nt = make_brackets sexpr_blocks in *)
+  (* nt;; *)
+
+let nt_dottedList = pack (const (fun s -> true)) (fun x -> Nil);;
+
+let nt_quoted = pack (const (fun s -> true)) (fun x -> Nil);;
+
+let nt_quasiQuoted = pack (const (fun s -> true)) (fun x -> Nil);;
+
+let nt_unquoted = pack (const (fun s -> true)) (fun x -> Nil);;
+
+let nt_unquoteAndSpliced = pack (const (fun s -> true)) (fun x -> Nil);;
+
+let make_brackets nt = make_paired (char '(') (char ')') nt;;
+
+let rec nt_sexpr s = 
+  let sexpr_blocks = disj_list [
+                          nt_boolean;
+                          nt_char;
+                          nt_number;
+                          nt_string;
+                          nt_symbol; 
+                          nt_list;
+                          nt_dottedList; 
+                          nt_quoted;
+                          nt_quasiQuoted;
+                          nt_unquoted;
+                          nt_unquoteAndSpliced
+                          ] in 
+  (make_spaced sexpr_blocks) s
+
+  and nt_list s =
+    let nt = make_brackets (star nt_sexpr) in
+    let nt = pack nt (fun (expr) -> match expr with
+    |[] -> Nil
+    |list -> List.fold_right (fun s1 s2 -> Pair(s1,s2)) list Nil) in
+    nt s 
+
+  and nt_dottedList s =
+    let nt = caten (plus nt_sexpr)(caten dot nt_sexpr) in
+    let nt = make_brackets nt in
+    let nt = pack nt (fun (expr) -> match expr with
+    |(f_sexpr,(_,s_sexpr)) -> List.fold_right (fun s1 s2 -> Pair(s1,s2)) f_sexpr s_sexpr) in
+    nt s
+
+  and nt_quoted s = 
+    let quote = char '\'' in
+    let nt = caten quote nt_sexpr in
+    let nt = pack nt (fun (_,s) -> Pair(Symbol("quote"),Pair(s,Nil))) in
+    nt s
+
+  and nt_quasiQuoted s =
+    let tik = char '`' in
+    let nt = caten tik nt_sexpr in
+    let nt = pack nt (fun (_,s) -> Pair(Symbol("quasiquote"), Pair(s,Nil))) in
+    nt s
+
+  and nt_unquoted s = 
+    let comma = char ',' in
+    let nt = caten comma nt_sexpr in
+    let nt = pack nt (fun (_,s) -> Pair(Symbol("unquote"), Pair(s,Nil))) in
+    nt s
+
+  and  nt_unquoteAndSpliced s = 
+    let comma = char ',' in
+    let shtrudel = char '@' in
+    let prefix = caten shtrudel comma in
+    let nt = caten prefix nt_sexpr in
+    let nt = pack nt (fun (_,s) -> Pair(Symbol("unquote-splicing"), Pair(s,Nil))) in
+    nt s;;
 
 
 
-let test_string nt str = let (e, s) = (nt (string_to_list str)) in (e, (Printf.sprintf "->[%s]" (list_to_string s)));;
+
 
