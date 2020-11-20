@@ -88,9 +88,75 @@ let nt_boolean =
   make_spaced nt;;
 
 (*3.3.2*)
+let digit = (range '0' '9');;
+
+let rec gcd x y =  if y==0 then x else gcd y (x mod y);;
+
+let nt_natural = 
+  let nt = plus digit in
+  let nt = pack nt (fun x -> int_of_string(list_to_string x)) in
+  nt;;
+
+let nt_sign = 
+  let nt = maybe (disj (char '+') (char '-')) in
+  let nt = pack nt (fun(sign) -> 
+  match sign with
+  | Some('-') -> -1
+  | _ -> +1) in
+  nt;;
+
+ (* char list -> int * char list = <fun>  *)
+let nt_int = 
+  let nt = caten nt_sign nt_natural in
+  let nt = pack nt (fun (a,b) -> a*b) in
+  nt;;
+
+(* char list -> sexpr * char list = <fun>  *)
+let nt_fraction = 
+  let slash = char '/' in 
+  let nt = (caten nt_int (caten slash nt_natural)) in
+  let nt = pack nt (fun (n,(s,d)) -> Number (Fraction(n/(gcd n d),d/(gcd n d)))) in
+  nt;;
+
+ (* char list -> sexpr * char list = <fun>  *)
+let nt_integer = 
+  let nt = pack nt_int (fun (int) -> Number (Fraction (int,1))) in
+  nt;;
+
+let dot = char '.';;
+
+(* char list -> sexpr * char list = <fun> *)
+let nt_float = 
+  let nt = (caten nt_int (caten dot nt_natural)) in
+  let nt = pack nt (fun (int,(b,natural)) ->
+   Number (Float (float_of_string ((string_of_int int) ^ "." ^ (string_of_int natural))))) in
+  nt;;
+
+
+
+
+(* 3.3.3 *)
+let lowercase_letters = (range 'a' 'z');;
+
+let uppercase_letters = (range_ci 'A' 'Z');;
+
+let punctuation = disj_list [(char '!');(char '$');(char '^');(char '*');(char '-');(char '_');
+                            (char '=');(char '+');(char '<');(char '>');(char '/');(char '?')];;
+
+(* char list -> char list * char list = <fun> *)
+let nt_symbol = 
+  let symbol_char_not_dot = disj_list [lowercase_letters; uppercase_letters; punctuation; digit] in
+  let symbol_char = (disj symbol_char_not_dot dot) in
+  let psc = (plus symbol_char) in
+  let scpsc = pack (caten symbol_char psc) (fun (e, es) -> (e :: es))  in
+  let nt = pack (caten symbol_char_not_dot nt_epsilon) (fun (e, es) -> (e :: es)) in
+  let nt = (disj scpsc nt) in 
+   nt;;  
+
 
 
 (*3.3.4*)
+(* char list -> sexpr * char list = <fun> *)
 let nt_string = 
   let quote = char (char_of_int 34) in
   let string_char = diff nt_any (disj (char (char_of_int 92)) (char (char_of_int 34))) in
@@ -110,8 +176,8 @@ let nt_string =
    (* let nt = pack nt (fun(s))  *)
   make_spaced nt;;
 
-(*char list -> sexpr * char list = <fun> *)
 (*3.3.5*)
+(*char list -> sexpr * char list = <fun> *)
   let nt_char = 
     let char_start = caten (char '#') (char '\\') in
     let visible_char = const (fun ch -> (char_of_int 32) < ch) in
@@ -127,17 +193,18 @@ let nt_string =
     let nt = pack nt (fun (_,ch) -> Char ch) in
     make_spaced nt;;
 
+let left_bracket = make_paired nt_whitespaces nt_whitespaces (char '(');;
+let right_bracket = make_paired nt_whitespaces nt_whitespaces (char ')');;
+
 (*3.3.6*)
-let nt_nil= 
-let left_bracket = char '(' in
-let right_bracket = char ')' in
-let nt = caten nt_whitespaces (caten left_bracket nt_whitespaces) in
-let nt = pack nt (fun (_,x) -> x) in
-let nt = caten nt nt_line_comment in
-let nt = pack nt (fun(_,x) -> x) in
-let nt = caten nt (caten nt_whitespaces right_bracket) in
-let nt = pack nt (fun(x) -> Nil) in
-make_spaced nt;;
+let nt_nil =
+  let nt = caten left_bracket (star(nt_line_comment)) in
+  (* let nt = pack nt (fun (_,x) -> x) in *)
+  (* let nt = caten nt (disj nt_whitespaces star(nt_line_comment)) in *)
+  let nt = pack nt (fun (_,x) -> x) in
+  let nt = caten nt right_bracket in
+  let nt = pack nt (fun (_) -> Nil) in
+  nt;;
 
 
 
