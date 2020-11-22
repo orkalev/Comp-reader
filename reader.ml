@@ -1,5 +1,6 @@
 
 #use "pc.ml";;
+open PC;;
 
 exception X_not_yet_implemented;;
 exception X_this_should_not_happen;;
@@ -31,7 +32,6 @@ let rec sexpr_eq s1 s2 =
 
 module Reader
 : sig
-  (* val read_sexpr : string -> sexpr *)
   val read_sexprs : string -> sexpr list 
 end
 = struct

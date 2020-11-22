@@ -1,0 +1,605 @@
+diff --git a/#structure_test.sh# b/#structure_test.sh#
+new file mode 100644
+index 0000000..022043b
+--- /dev/null
++++ b/#structure_test.sh#
+@@ -0,0 +1,97 @@
++
++#!/bin/bash
++
++BASE_DIR=$(pwd)
++PATCH=$1
++AUTHENTICITY=readme.txt
++CODE=reader.ml
++STATEMENT="realize that should our code be found to contain code from other sources, that a formal case shall be opened against"
++PROBLEM=0
++GIT_REPO="https://www.cs.bgu.ac.il/~comp211/compiler"
++LOCAL_REPO=compiler
++TMP_FOLDER=$(mktemp -d)
++OCAML_TMP_FILE=struct_test.ml
++OCAML_TYPE_TEST="#use \"reader.ml\";;
++(Bool true : sexpr);;
++(Nil : sexpr);;
++(Number (Fraction (1 ,2)) : sexpr);;
++(Number (Float 1.) : sexpr);;
++(Char 'a' : sexpr);;
++(String \"Asdas\" : sexpr);;
++(Symbol \"lsdh\" : sexpr);;
++(Pair (Nil, Nil) : sexpr);;"
++OCAML_SIG_TEST="#use \"reader.ml\";;
++try
++  ((Reader.read_sexprs \"\") : sexpr list)
++with X_not_yet_implemented -> print_string \"Warning: Your submission is missing an implementation for Reader.read_sexprs!\n\";  [Nil];;"
++
++cleanup () {
++    #echo "cleaning up temporary files and exiting."
++    rm -rf $TMP_FOLDER
++}
++
++if [ $# -lt 1 ]; then
++    PATCH="compiler/compiler.patch"
++fi
++
++if ! [ -f $PATCH ]; then
++    echo "ERROR: The patch file '$PATCH' cannot be found. Please provide the relative path filename to your patch file."
++    exit 2
++fi
++
++cd $TMP_FOLDER
++git clone -q $GIT_REPO
++if [ "$?" -ne 0 ]; then
++    echo "ERROR: There was a problem creating a temporary clone of the project repository. There might be a problem with your network connection. The structure test cannot be completed."
++    cleanup
++    exit 2
++fi
++
++cd $LOCAL_REPO
++git apply --ignore-whitespace --whitespace=nowarn $BASE_DIR/$PATCH
++if [ "$?" -ne 0 ]; then
++    echo "ERROR: The contents of your patch file are invalid and git cannot apply it. The structure test cannot be completed."
++    cleanup
++    exit 2
++fi
++
++
++if ! [ -f $AUTHENTICITY ]; then
++    echo "ERROR: Your submission is missing the authenticity statement file ($AUTHENTICITY)."
++    PROBLEM=1
++else 
++    ID=$(egrep -e '[0-9]{7,10}' $AUTHENTICITY)
++    STMNT=$(cat $AUTHENTICITY | tr -d [:space:] | grep -i "$(echo "$STATEMENT" | tr -d [:space:])")
++
++    if [ -z "$ID" ] || [ -z "$STMNT" ] ; then
++	echo "ERROR: Your authenticity statement (in $AUTHENTICITY) is incomplete."
++	PROBLEM=1
++    fi
++fi
++
++if ! [ -f $CODE ]; then
++    echo "ERROR: Your submission is missing the required code file: $CODE."
++    PROBLEM=1
++fi
++
++echo $OCAML_TYPE_TEST > $OCAML_TMP_FILE && ocaml $OCAML_TMP_FILE 2> /dev/null
++if [ $? -ne 0 ]; then
++    echo "ERROR: Your OCaml code contains invalid changes to the sexpr and/or number types."
++    PROBLEM=1
++fi
++
++echo $OCAML_SIG_TEST > $OCAML_TMP_FILE && ocaml $OCAML_TMP_FILE 2> /dev/null
++if [ $? -ne 0 ]; then
++    echo "ERROR: Your OCaml code contains invalid changes to the signatures of the Reader module."
++    PROBLEM=1
++fi
++
++if [ $PROBLEM -ne 0 ]; then
++    echo "!!! Your submission is invalid. Please correct the problems and try again. !!!"
++else 
++    echo "Your submission passed the structure test.
++This does not mean that your assignment is correct, only that we can test it properly."
++fi
++
++cleanup
++exit $PROBLEM
+diff --git a/reader.ml b/reader.ml
+index 32445c2..fc05d4b 100644
+--- a/reader.ml
++++ b/reader.ml
+@@ -29,8 +29,10 @@ let rec sexpr_eq s1 s2 =
+   | Pair(car1, cdr1), Pair(car2, cdr2) -> (sexpr_eq car1 car2) && (sexpr_eq cdr1 cdr2)
+   | _ -> false;;
+ 
+-module Reader: sig
+-  val read_sexprs : string -> sexpr list
++module Reader
++: sig
++  (* val read_sexpr : string -> sexpr *)
++  val read_sexprs : string -> sexpr list 
+ end
+ = struct
+ let normalize_scheme_symbol str =
+@@ -41,6 +43,247 @@ let normalize_scheme_symbol str =
+   else Printf.sprintf "|%s|" str;;
+ 
+ 
+-let read_sexprs string = raise X_not_yet_implemented;;
+-  
+-end;; (* struct Reader *)
++(* **********************Our code start here**********************  *)
++
++(*val make_paired : ('a -> 'b * 'c) -> ('d -> 'e * 'f) -> ('c -> 'g * 'd) -> 'a -> 'g * 'f = <fun>  *)
++let make_paired nt_left nt_right nt =
++  let nt = caten nt_left nt in
++  let nt = pack nt (fun (_,d) -> d) in
++  let nt = caten nt nt_right in
++  pack nt (fun (d,_) -> d);;
++
++(*3.2.1*)
++(*val nt_whitespaces : char list -> char list * char list = <fun> *)
++let nt_whitespaces = star(nt_whitespace);;
++
++(*val make_spaced : (char list -> 'a * char list) -> char list -> 'a * char list = <fun> *)
++(*The parser will skips whitespaces from left and right*)
++let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
++
++(*3.2.2*)
++(*char list -> sexpr * char list = <fun> *)
++let nt_line_comment =
++  let comment_start = (char ';') in
++  let end_of_line = char (char_of_int 10) in
++  let comment_end = disj end_of_line (pack nt_end_of_input (fun (d) -> 'd')) in
++  let comment = star(diff nt_any comment_end) in
++  let nt = caten comment_start comment in
++  let nt = pack nt (fun (_,d)->d) in
++  let nt = caten nt comment_end in
++  let nt = pack nt (fun (_)->[]) in
++  nt;;
++
++let d_c_a_ws = disj nt_whitespaces nt_line_comment;;
++let make_comment_and_whitespaced nt = make_paired d_c_a_ws d_c_a_ws nt;;
++
++(*3.3.1*)
++(*char list -> sexpr * char list = <fun> *)
++let nt_boolean = 
++  let hashtag = (char '#') in
++  let bool_true = (char_ci 't') in
++  let bool_false = (char_ci 'f') in
++  let hashtag_true = caten hashtag bool_true in
++  let hashtag_false = caten hashtag bool_false in
++  let bool_true = pack hashtag_true (fun (t) -> true) in
++  let bool_false = pack hashtag_false (fun (f) -> false) in
++  let nt = disj bool_true bool_false in
++  let nt = pack nt (fun (x) -> (Bool x)) in
++  make_spaced nt;;
++
++(* 3.3.3 *)
++(* let lowercase_letters = (range 'a' 'z');; *)
++let digit = (range '0' '9');;
++let dot = char '.';;
++
++let uppercase_letters = 
++    let nt = (range_ci 'A' 'Z') in
++    let nt = pack nt lowercase_ascii in
++    nt;;
++
++let punctuation = disj_list [(char '!');(char '$');(char '^');(char '*');(char '-');(char '_');
++                            (char '=');(char '+');(char '<');(char '>');(char '/');(char '?');(char ':')];;
++
++(* char list -> char list * char list = <fun> *)
++let nt_symbol = 
++  let symbol_char_not_dot = disj_list [uppercase_letters; punctuation; digit] in
++  let symbol_char = (disj symbol_char_not_dot dot) in
++  let psc = (plus symbol_char) in
++  let scpsc = pack (caten symbol_char psc) (fun (e, es) -> (e :: es))  in
++  let nt = pack (caten symbol_char_not_dot nt_epsilon) (fun (e, es) -> (e :: es)) in
++  let nt = (disj scpsc nt) in 
++  let nt = pack nt (fun (e) -> Symbol (list_to_string e)) in
++   nt;; 
++
++(*3.3.2*)
++let rec gcd x y =  if y==0 then x else gcd y (x mod y);;
++
++let nt_natural = 
++  let nt = plus digit in
++  let nt = pack nt (fun x -> int_of_string(list_to_string x)) in
++  nt;;
++
++let nt_sign = 
++  let nt = maybe (disj (char '+') (char '-')) in
++  let nt = pack nt (fun(sign) -> 
++  match sign with
++  | Some('-') -> -1
++  | _ -> +1) in
++  nt;;
++
++ (* char list -> int * char list = <fun>  *)
++let nt_int = 
++  let nt = caten nt_sign nt_natural in
++  let nt = pack nt (fun (a,b) -> a*b) in
++  nt;;
++
++(* char list -> sexpr * char list = <fun>  *)
++let nt_fraction = 
++  let slash = char '/' in 
++  let nt = (caten nt_int (caten slash nt_natural)) in
++  let nt = pack nt (fun (n,(s,d)) -> Number (Fraction(n/(gcd n d),d/(gcd n d)))) in
++  nt;;
++
++ (* char list -> sexpr * char list = <fun>  *)
++let nt_integer = 
++  let nt = not_followed_by nt_int nt_symbol in 
++  let nt = pack nt (fun (int) -> Number (Fraction (int,1))) in
++  nt;;
++
++let nt_float_unpacked = 
++  let nt = (caten nt_int (caten dot nt_natural)) in
++  let nt = pack nt (fun (int,(b,natural)) -> float_of_string((string_of_int int) ^ "." ^ (string_of_int natural))) in
++  nt;;
++
++let nt_float = 
++  let nt = pack nt_float_unpacked (fun (num) -> Number (Float (num))) in
++  nt;;
++
++(* 4.1 *)
++let nt_scientific_notation = 
++  let e = char_ci 'e' in
++  let i_t_f = pack nt_int (fun num -> float_of_int num) in
++  let nt = disj nt_float_unpacked i_t_f in
++  let nt = caten nt (caten e i_t_f) in
++  let nt = pack nt (fun (n,(e,exp))-> let num = n *. (10. ** exp) in Number(Float(num))) in
++  nt;;
++
++let nt_number = disj_list [nt_scientific_notation ; nt_float; nt_fraction; nt_integer];;
++
++(*3.3.4*)
++(* char list -> sexpr * char list = <fun> *)
++let nt_string = 
++  let quote = char (char_of_int 34) in
++  let string_char = diff nt_any (disj (char (char_of_int 92)) (char (char_of_int 34))) in
++  let meta_chars = disj_list [
++    pack (word "\\r") (fun(_) -> (char_of_int 13));
++    pack (word "\\n") (fun(_) -> (char_of_int 10));
++    pack (word "\\t") (fun(_) -> (char_of_int 9));
++    pack (word "\\f") (fun(_) -> (char_of_int 12));
++    pack (word "\\\\") (fun(_) -> (char_of_int 92));
++    pack (word "\\\"") (fun(_) -> (char_of_int 34));
++  ] in
++  let string = disj string_char meta_chars in
++  let nt = caten quote (star(string)) in
++  let nt = pack nt (fun (_,s) -> s) in
++  let nt = caten nt quote in 
++  let nt = pack nt (fun (s,_)-> (String(list_to_string s))) in 
++   (* let nt = pack nt (fun(s))  *)
++  make_spaced nt;;
++
++(*3.3.5*)
++(*char list -> sexpr * char list = <fun> *)
++  let nt_char = 
++    let char_start = caten (char '#') (char '\\') in
++    let visible_char = const (fun ch -> (char_of_int 32) < ch) in
++    let named_char = disj_list [
++      pack (word_ci "nul") (fun(_) -> (char_of_int 0));
++      pack (word_ci "newline") (fun(_) -> (char_of_int 10));
++      pack (word_ci "return") (fun(_) -> (char_of_int 13));
++      pack (word_ci "tab") (fun(_) -> (char_of_int 9));
++      pack (word_ci "page") (fun(_) -> (char_of_int 12));
++      pack (word_ci "space") (fun(_) -> (char_of_int 32));
++    ] in
++    let nt = caten char_start (disj named_char visible_char) in  
++    let nt = pack nt (fun (_,ch) -> Char ch) in
++    make_spaced nt;;
++
++
++(*3.3.6*)
++let left_bracket = make_paired nt_whitespaces nt_whitespaces (char '(');;
++let right_bracket = make_paired nt_whitespaces nt_whitespaces (char ')');;
++
++let nt_nil =
++  let nt = caten left_bracket (star(nt_line_comment)) in
++  let nt = pack nt (fun (_,x) -> x) in
++  let nt = caten nt right_bracket in
++  let nt = pack nt (fun (_) -> Nil) in
++  nt;;
++
++let nt_dottedList = pack (const (fun s -> true)) (fun x -> Nil);;
++
++let nt_quoted = pack (const (fun s -> true)) (fun x -> Nil);;
++
++let nt_quasiQuoted = pack (const (fun s -> true)) (fun x -> Nil);;
++
++let nt_unquoted = pack (const (fun s -> true)) (fun x -> Nil);;
++
++let nt_unquoteAndSpliced = pack (const (fun s -> true)) (fun x -> Nil);;
++
++let make_brackets nt = make_paired (char '(') (char ')') nt;;
++
++let rec nt_sexpr s = 
++  let sexpr_blocks = disj_list [
++                          nt_boolean;
++                          nt_char;
++                          nt_number;
++                          nt_string;
++                          nt_symbol; 
++                          nt_list;
++                          nt_dottedList; 
++                          nt_quoted;
++                          nt_quasiQuoted;
++                          nt_unquoted;
++                          nt_unquoteAndSpliced
++                          ] in 
++  (make_comment_and_whitespaced sexpr_blocks) s
++  and nt_list s =
++    let nt = make_brackets (star nt_sexpr) in
++    let nt = pack nt (fun (expr) -> match expr with
++    |[] -> Nil
++    |list -> List.fold_right (fun s1 s2 -> Pair(s1,s2)) list Nil) in
++    nt s 
++  and nt_dottedList s =
++    let nt = caten (plus nt_sexpr)(caten dot nt_sexpr) in
++    let nt = make_brackets nt in
++    let nt = pack nt (fun (expr) -> match expr with
++    |(f_sexpr,(_,s_sexpr)) -> List.fold_right (fun s1 s2 -> Pair(s1,s2)) f_sexpr s_sexpr) in
++    nt s
++  and nt_quoted s = 
++    let quote = char '\'' in
++    let nt = caten quote nt_sexpr in
++    let nt = pack nt (fun (_,s) -> Pair(Symbol("quote"),Pair(s,Nil))) in
++    nt s
++  and nt_quasiQuoted s =
++    let tik = char '`' in
++    let nt = caten tik nt_sexpr in
++    let nt = pack nt (fun (_,s) -> Pair(Symbol("quasiquote"), Pair(s,Nil))) in
++    nt s
++  and nt_unquoted s = 
++    let comma = char ',' in
++    let nt = caten comma nt_sexpr in
++    let nt = pack nt (fun (_,s) -> Pair(Symbol("unquote"), Pair(s,Nil))) in
++    nt s
++  and  nt_unquoteAndSpliced s = 
++    let comma = char ',' in
++    let shtrudel = char '@' in
++    let prefix = caten comma shtrudel  in
++    (* let prefix = pack prefix () *)
++    let nt = caten prefix nt_sexpr in
++    let nt = pack nt (fun (_,s) -> Pair(Symbol("unquote-splicing"), Pair(s,Nil))) in
++    nt s;;
++
++let read_sexprs string =
++  let (ast,s) = ((star nt_sexpr) (string_to_list string)) in
++  ast;;
++
++end;;
+\ No newline at end of file
+diff --git a/reader_test.ml b/reader_test.ml
+new file mode 100644
+index 0000000..c2efa5a
+--- /dev/null
++++ b/reader_test.ml
+@@ -0,0 +1,89 @@
++
++#use "reader.ml";;
++open Reader;;
++
++let eq sexp_list1 sexp_list2 = 
++  let s1 = List.hd sexp_list1 in
++  let s2 = List.hd sexp_list2 in
++  sexpr_eq s1 s2;;
++
++let test_exp res expected = if res = [] then false else 
++  if eq res expected then true else false;;
++
++let int1 = test_exp (read_sexprs("1")) ([Number(Fraction(1,1))]);;
++let int2 = test_exp (read_sexprs("  1")) ([Number(Fraction(1,1))]);;
++let int3 = test_exp (read_sexprs("  1 \t ")) ([Number(Fraction(1,1))]);;
++let int4 = test_exp (read_sexprs("01234")) ([Number(Fraction(1234,1))]);;
++let int5 = test_exp (read_sexprs("001234")) ([Number(Fraction(1234,1))]);;
++let int6 = test_exp (read_sexprs("-01234")) ([Number(Fraction(-1234,1))]);;
++let int7 = test_exp (read_sexprs("+01234")) ([Number(Fraction(1234,1))]);;
++let int8 = test_exp (read_sexprs("+00940")) ([Number(Fraction(940,1))]);;
++let frac1 = test_exp (read_sexprs("1/1")) ([Number(Fraction(1,1))]);;
++let frac2 = test_exp (read_sexprs("2/4")) ([Number(Fraction(1,2))]);;
++let frac3 = test_exp (read_sexprs("-17/6")) ([Number(Fraction(-17,6))]);;
++let frac4 = test_exp (read_sexprs("+006/012")) ([Number(Fraction(1,2))]);;
++
++let sci1 = test_exp (read_sexprs("+1e1")) ([Number(Float(10.0))]);;
++let sci2 = test_exp (read_sexprs("1E+1")) ([Number(Float(10.0))]);;
++let sci3 = test_exp (read_sexprs("3.14e-1")) ([Number(Float(0.314))]);;
++let sci4 = test_exp (read_sexprs("  \n 3.14e-1\t\t\t")) ([Number(Float(0.314))]);;
++let sci5 = test_exp (read_sexprs("+0000012.3E00000000002")) ([Number(Float(1230.0))]);;
++let sci6 = test_exp (read_sexprs("-5.000000e-2")) ([Number(Float(-0.05))]);;
++let sci7 = test_exp (read_sexprs("+5.000000e1")) ([Number(Float(50.0))]);;
++let sci8 = test_exp (read_sexprs(";testing a <>?<>?: comment\n+5.000000e1;comment!!")) ([Number(Float(50.0))]);;
++
++let float1 = test_exp (read_sexprs("1.0")) ([Number(Float(1.0))]);;
++let float2 = test_exp (read_sexprs("    1.0     ")) ([Number(Float(1.0))]);;
++let float3 = test_exp (read_sexprs("  005.01290     ")) ([Number(Float(5.0129))]);;
++let float4 = test_exp (read_sexprs("  501.000000     ")) ([Number(Float(501.0))]);;
++let float5 = test_exp (read_sexprs(" +999.009000     ")) ([Number(Float(999.009))]);;
++let float6 = test_exp (read_sexprs(" -001.000123000     ")) ([Number(Float(-1.000123))]);;
++
++let bool1 = test_exp (read_sexprs(" #t  ")) ([Bool(true)]);;
++let bool2 = test_exp (read_sexprs(" \012 #T  ")) ([Bool(true)]);;
++let bool3 = test_exp (read_sexprs("#f  ")) ([Bool(false)]);;
++let bool4 = test_exp (read_sexprs("\n#F  ")) ([Bool(false)]);;
++let bool5 = test_exp (read_sexprs("\n#F  ")) ([Bool(false)]);;
++let bool6 = test_exp (read_sexprs("\n#t  #t  ")) ([Bool(true); Bool(true)]);;
++
++let symbol1 = test_exp (read_sexprs(" 1a^  ")) ([Symbol("1a^")]);;
++let symbol2 = test_exp (read_sexprs(" 1a^<:  ")) ([Symbol("1a^<:")]);;
++let symbol3 = test_exp (read_sexprs("AbC")) ([Symbol("abc")]);;
++let symbol4 = test_exp (read_sexprs("a1+3====1.1")) ([Symbol("a1+3====1.1")]);;
++let symbol5 = test_exp (read_sexprs("..")) ([Symbol("..")]);;
++let symbol6 = test_exp (read_sexprs("..123Ac^;comment")) ([Symbol("..123ac^")]);;
++
++let string1 = test_exp (read_sexprs("\"\"")) ([String("")]);;
++let string2 = test_exp (read_sexprs("\"    \"")) ([String("    ")]);;
++let string3 = test_exp (read_sexprs("   \"\"    ")) ([String("")]);;
++let string4 = test_exp (read_sexprs("\"hello . ^ . \"")) ([String("hello . ^ . ")]);;
++let string5 = test_exp (read_sexprs("\"hello . ^ [] ; a {} #@\"")) ([String("hello . ^ [] ; a {} #@")]);;
++let string6 = test_exp (read_sexprs("\"\\r\"")) ([String("\r")]);;
++let string7 = test_exp (read_sexprs("\"\\n\"")) ([String("\n")]);;
++let string8 = test_exp (read_sexprs("\"\\t\"")) ([String("\t")]);;
++let string9 = test_exp (read_sexprs("\"\\f\"")) ([String("\012")]);;
++let string10 = test_exp (read_sexprs("\"\\\\\"")) ([String("\\")]);;
++
++let char1 = test_exp (read_sexprs("#\\a")) ([Char('a')]);;
++let char2 = test_exp (read_sexprs("   #\\a\t")) ([Char('a')]);;
++let char3 = test_exp (read_sexprs("   #\\A\t")) ([Char('A')]);;
++let char4 = test_exp (read_sexprs("   #\\nul")) ([Char(char_of_int 0)]);;
++let char5 = test_exp (read_sexprs("   #\\newline")) ([Char(char_of_int 10)]);;
++let char6 = test_exp (read_sexprs("   #\\return")) ([Char(char_of_int 13)]);;
++let char7 = test_exp (read_sexprs("   #\\tab")) ([Char(char_of_int 9)]);;
++let char8 = test_exp (read_sexprs("   #\\page")) ([Char(char_of_int 12)]);;
++let char9 = test_exp (read_sexprs("   #\\space")) ([Char(' ')]);;
++
++let quote1 = test_exp (read_sexprs("'1")) ([Pair(Symbol("quote"), Pair(Number(Fraction(1,1)), Nil))]);;
++let quote2 = test_exp (read_sexprs("'3+2")) ([Pair(Symbol("quote"), Pair(Symbol("3+2"), Nil))]);;
++let quote3 = test_exp (read_sexprs("'(a 1 . a)")) ([Pair(Symbol("quote"), Pair( Pair(Symbol("a"), Pair(Number(Fraction(1,1)), Symbol("a"))) , Nil))]);;
++let quote4 = test_exp (read_sexprs("'(a #;1 . a)")) ([Pair(Symbol("quote"), Pair(Pair(Symbol("a"),Symbol("a")) , Nil))]);;
++let quote5 = test_exp (read_sexprs("'(a a #;r)")) ([Pair(Symbol("quote"),  Pair(Pair(Symbol("a"),Pair(Symbol"a",Nil)), Nil))]);;
++
++let nested_lists1 = test_exp (read_sexprs("( 1.23e-2 a!^< (sym1 2sym))")) ([Pair(Number(Float(0.0123)),Pair(Symbol("a!^<"), Pair(Pair(Symbol("sym1"),Pair(Symbol("2sym"),Nil)),Nil)))]);;
++let nested_lists2 = test_exp (read_sexprs("\t( \"str1\" . \"str2\\\"\" )")) ([Pair(String("str1"),String("str2\""))]);;
++let nested_lists3 = test_exp (read_sexprs("(() ())")) ([Pair(Nil,Pair(Nil,Nil))]);;
++let dotted_list1 = test_exp (read_sexprs("(1.1 . (1.2 . (1.3 . ())))")) ([Pair(Number(Float (1.1)), Pair(Number(Float(1.2)),Pair(Number(Float(1.3)),Nil)))]);;
++let dotted_list2 = test_exp (read_sexprs("(1.1 . (1.2 . (1.3 . ())))")) (read_sexprs("(1.1 1.2 1.3 )"));;
++let dotted_list3 = test_exp (read_sexprs("(1.1 #;(1.2 1.3))")) ([Pair(Number(Float (1.1)),Nil)]);;
++let empty_list = test_exp (read_sexprs("()")) ([Nil]);;
+\ No newline at end of file
+diff --git a/readme.txt b/readme.txt
+index e69de29..26e9dff 100644
+--- a/readme.txt
++++ b/readme.txt
+@@ -0,0 +1,10 @@
++a) Or Kalev 305571390 
++b) Ittai Corem 302240627 
++ 
++We assert that the work we submitted is 100% our own. We have not received any
++part from any other student in the class, nor have we give parts of it for use to others.
++Nor have we used code from other sources: Courses taught previously at this university,
++courses taught at other universities, various bits of code found on the Internet, etc.
++We realize that should our code be found to contain code from other sources, that a
++formal case shall be opened against us with va’adat mishma’at, in pursuit of disciplinary
++action.
+\ No newline at end of file
+diff --git a/sample.ml b/sample.ml
+new file mode 100644
+index 0000000..75801f8
+--- /dev/null
++++ b/sample.ml
+@@ -0,0 +1,12 @@
++#use "reader.ml";;
++open Reader;;
++
++#use "topfind";;
++#use "pc.ml";;
++open PC;;
++
++
++(* let test_tag_raises_6 test_ctxt = assert_raises X_this_should_not_happen (fun _ -> (Reader.read_sexpr "(1 #{foo}=2 3 #{foo}=4)"));;
++let test_tag_raises_7 test_ctxt = assert_raises X_this_should_not_happen (fun _ -> (Reader.read_sexpr "(1 (#{x}=5 6) 7 8 (#{x}=3 5) 9)"));; *)
++
++Reader.read_sexprs "(1 (#{x}=5 6) 7 8 (#{x}=3 5) 9)"
+\ No newline at end of file
+diff --git a/structure_test.sh b/structure_test.sh
+new file mode 100755
+index 0000000..a7aacd3
+--- /dev/null
++++ b/structure_test.sh
+@@ -0,0 +1,96 @@
++#!/bin/bash
++
++BASE_DIR=$(pwd)
++PATCH=$1
++AUTHENTICITY=readme.txt
++CODE=reader.ml
++STATEMENT="realize that should our code be found to contain code from other sources, that a formal case shall be opened against"
++PROBLEM=0
++GIT_REPO="https://www.cs.bgu.ac.il/~comp211/compiler"
++LOCAL_REPO=compiler
++TMP_FOLDER=$(mktemp -d)
++OCAML_TMP_FILE=struct_test.ml
++OCAML_TYPE_TEST="#use \"reader.ml\";;
++(Bool true : sexpr);;
++(Nil : sexpr);;
++(Number (Fraction (1 ,2)) : sexpr);;
++(Number (Float 1.) : sexpr);;
++(Char 'a' : sexpr);;
++(String \"Asdas\" : sexpr);;
++(Symbol \"lsdh\" : sexpr);;
++(Pair (Nil, Nil) : sexpr);;"
++OCAML_SIG_TEST="#use \"reader.ml\";;
++try
++  ((Reader.read_sexprs \"\") : sexpr list)
++with X_not_yet_implemented -> print_string \"Warning: Your submission is missing an implementation for Reader.read_sexprs!\n\";  [Nil];;"
++
++cleanup () {
++    #echo "cleaning up temporary files and exiting."
++    rm -rf $TMP_FOLDER
++}
++
++if [ $# -lt 1 ]; then
++    PATCH="compiler/compiler.patch"
++fi
++
++if ! [ -f $PATCH ]; then
++    echo "ERROR: The patch file '$PATCH' cannot be found. Please provide the relative path filename to your patch file."
++    exit 2
++fi
++
++cd $TMP_FOLDER
++git clone -q $GIT_REPO
++if [ "$?" -ne 0 ]; then
++    echo "ERROR: There was a problem creating a temporary clone of the project repository. There might be a problem with your network connection. The structure test cannot be completed."
++    cleanup
++    exit 2
++fi
++
++cd $LOCAL_REPO
++git apply --ignore-whitespace --whitespace=nowarn $BASE_DIR/$PATCH
++if [ "$?" -ne 0 ]; then
++    echo "ERROR: The contents of your patch file are invalid and git cannot apply it. The structure test cannot be completed."
++    cleanup
++    exit 2
++fi
++
++
++if ! [ -f $AUTHENTICITY ]; then
++    echo "ERROR: Your submission is missing the authenticity statement file ($AUTHENTICITY)."
++    PROBLEM=1
++else 
++    ID=$(egrep -e '[0-9]{7,10}' $AUTHENTICITY)
++    STMNT=$(cat $AUTHENTICITY | tr -d [:space:] | grep -i "$(echo "$STATEMENT" | tr -d [:space:])")
++
++    if [ -z "$ID" ] || [ -z "$STMNT" ] ; then
++	echo "ERROR: Your authenticity statement (in $AUTHENTICITY) is incomplete."
++	PROBLEM=1
++    fi
++fi
++
++if ! [ -f $CODE ]; then
++    echo "ERROR: Your submission is missing the required code file: $CODE."
++    PROBLEM=1
++fi
++
++echo $OCAML_TYPE_TEST > $OCAML_TMP_FILE && ocaml $OCAML_TMP_FILE 2> /dev/null
++if [ $? -ne 0 ]; then
++    echo "ERROR: Your OCaml code contains invalid changes to the sexpr and/or number types."
++    PROBLEM=1
++fi
++
++echo $OCAML_SIG_TEST > $OCAML_TMP_FILE && ocaml $OCAML_TMP_FILE 2> /dev/null
++if [ $? -ne 0 ]; then
++    echo "ERROR: Your OCaml code contains invalid changes to the signatures of the Reader module."
++    PROBLEM=1
++fi
++
++if [ $PROBLEM -ne 0 ]; then
++    echo "!!! Your submission is invalid. Please correct the problems and try again. !!!"
++else 
++    echo "Your submission passed the structure test.
++This does not mean that your assignment is correct, only that we can test it properly."
++fi
++
++cleanup
++exit $PROBLEM
