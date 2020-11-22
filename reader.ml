@@ -43,14 +43,7 @@ let normalize_scheme_symbol str =
   else Printf.sprintf "|%s|" str;;
 
 
-  let read_sexprs string = raise X_not_yet_implemented;;
-  end;; 
-   (* let read_sexprs string =
-    let (ast,s) = ((star nt_sexpr) (string_to_list string)) in
-    ast;;
-  end;;  *)
-  (* end;; *)
-
+(* **********************Our code start here**********************  *)
 
 (*val make_paired : ('a -> 'b * 'c) -> ('d -> 'e * 'f) -> ('c -> 'g * 'd) -> 'a -> 'g * 'f = <fun>  *)
 let make_paired nt_left nt_right nt =
@@ -122,8 +115,6 @@ let nt_symbol =
    nt;; 
 
 (*3.3.2*)
-
-
 let rec gcd x y =  if y==0 then x else gcd y (x mod y);;
 
 let nt_natural = 
@@ -158,8 +149,6 @@ let nt_integer =
   let nt = pack nt (fun (int) -> Number (Fraction (int,1))) in
   nt;;
 
-
-
 let nt_float_unpacked = 
   let nt = (caten nt_int (caten dot nt_natural)) in
   let nt = pack nt (fun (int,(b,natural)) -> float_of_string((string_of_int int) ^ "." ^ (string_of_int natural))) in
@@ -178,14 +167,7 @@ let nt_scientific_notation =
   let nt = pack nt (fun (n,(e,exp))-> let num = n *. (10. ** exp) in Number(Float(num))) in
   nt;;
 
-  let nt_number = disj_list [nt_scientific_notation ; nt_float; nt_fraction; nt_integer];;
-
-
-
-
- 
-
-
+let nt_number = disj_list [nt_scientific_notation ; nt_float; nt_fraction; nt_integer];;
 
 (*3.3.4*)
 (* char list -> sexpr * char list = <fun> *)
@@ -232,32 +214,10 @@ let right_bracket = make_paired nt_whitespaces nt_whitespaces (char ')');;
 
 let nt_nil =
   let nt = caten left_bracket (star(nt_line_comment)) in
-  (* let nt = pack nt (fun (_,x) -> x) in *)
-  (* let nt = caten nt (disj nt_whitespaces star(nt_line_comment)) in *)
   let nt = pack nt (fun (_,x) -> x) in
   let nt = caten nt right_bracket in
   let nt = pack nt (fun (_) -> Nil) in
   nt;;
-
-(* 3.3.7 *)
-(* let rec nt_list s  =  *)
-  (* let nt =  make_brackets (pack (star sexpr_blocks) (fun x -> List.fold_right
-    (fun nt1 nt2 ->
-    Pair(nt1 nt2)
-    s
-    Nil;;))) in
-  nt;; *)
-
-(* let nt = pack (make_brackets (star sexpr_blocks)) (fun (_,(s._)) -> match s with *)
-(* | [] -> Nil *)
-(* | lll -> List.fold_right (fun s1 s2 -> Pair (s1,s2)) lll Nil) in *)
-(* nt;; *)
-  
-  (* match s with *)
-  (* | [] -> [] *)
-  (* | e::s -> make_brackets sexpr_blocks;; *)
-  (* let nt = make_brackets sexpr_blocks in *)
-  (* nt;; *)
 
 let nt_dottedList = pack (const (fun s -> true)) (fun x -> Nil);;
 
@@ -286,39 +246,33 @@ let rec nt_sexpr s =
                           nt_unquoteAndSpliced
                           ] in 
   (make_comment_and_whitespaced sexpr_blocks) s
-
   and nt_list s =
     let nt = make_brackets (star nt_sexpr) in
     let nt = pack nt (fun (expr) -> match expr with
     |[] -> Nil
     |list -> List.fold_right (fun s1 s2 -> Pair(s1,s2)) list Nil) in
     nt s 
-
   and nt_dottedList s =
     let nt = caten (plus nt_sexpr)(caten dot nt_sexpr) in
     let nt = make_brackets nt in
     let nt = pack nt (fun (expr) -> match expr with
     |(f_sexpr,(_,s_sexpr)) -> List.fold_right (fun s1 s2 -> Pair(s1,s2)) f_sexpr s_sexpr) in
     nt s
-
   and nt_quoted s = 
     let quote = char '\'' in
     let nt = caten quote nt_sexpr in
     let nt = pack nt (fun (_,s) -> Pair(Symbol("quote"),Pair(s,Nil))) in
     nt s
-
   and nt_quasiQuoted s =
     let tik = char '`' in
     let nt = caten tik nt_sexpr in
     let nt = pack nt (fun (_,s) -> Pair(Symbol("quasiquote"), Pair(s,Nil))) in
     nt s
-
   and nt_unquoted s = 
     let comma = char ',' in
     let nt = caten comma nt_sexpr in
     let nt = pack nt (fun (_,s) -> Pair(Symbol("unquote"), Pair(s,Nil))) in
     nt s
-
   and  nt_unquoteAndSpliced s = 
     let comma = char ',' in
     let shtrudel = char '@' in
@@ -328,29 +282,8 @@ let rec nt_sexpr s =
     let nt = pack nt (fun (_,s) -> Pair(Symbol("unquote-splicing"), Pair(s,Nil))) in
     nt s;;
 
+let read_sexprs string =
+  let (ast,s) = ((star nt_sexpr) (string_to_list string)) in
+  ast;;
 
-
-
- (* let read_sexpr string = 
-  let (sexpr, s) = (nt_sexpr (string_to_list string)) in
-  if (s = [])
-  then sexpr
-  else raise X_no_match;;
-
-  let read_sexprs string = 
-    let (sexpr_list, s) = ((star nt_sexpr) (string_to_list string)) in
-    sexpr_list;;
-
-
-
- end;; *)
- (* let read_sexprs string =  *)
-  (* let nt = star nt_sexpr in *)
-  (* let nt = pack nt (fun ast -> ast) in *)
-  (* nt (string_to_list string);; *)
-
-  (* let read_sexprs string =
-    let (ast,s) = ((star nt_sexpr) (string_to_list string)) in
-    ast;;
-  end;; *)
-  
+end;;
