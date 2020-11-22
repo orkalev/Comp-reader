@@ -31,7 +31,8 @@ let rec sexpr_eq s1 s2 =
 
 module Reader
 : sig
-  val read_sexprs : string -> sexpr list
+  (* val read_sexpr : string -> sexpr *)
+  val read_sexprs : string -> sexpr list 
 end
 = struct
 let normalize_scheme_symbol str =
@@ -42,8 +43,14 @@ let normalize_scheme_symbol str =
   else Printf.sprintf "|%s|" str;;
 
 
-let read_sexprs string = raise X_not_yet_implemented;;
-end;; (* struct Reader *)
+  let read_sexprs string = raise X_not_yet_implemented;;
+  end;; 
+   (* let read_sexprs string =
+    let (ast,s) = ((star nt_sexpr) (string_to_list string)) in
+    ast;;
+  end;;  *)
+  (* end;; *)
+
 
 (*val make_paired : ('a -> 'b * 'c) -> ('d -> 'e * 'f) -> ('c -> 'g * 'd) -> 'a -> 'g * 'f = <fun>  *)
 let make_paired nt_left nt_right nt =
@@ -70,8 +77,11 @@ let nt_line_comment =
   let nt = caten comment_start comment in
   let nt = pack nt (fun (_,d)->d) in
   let nt = caten nt comment_end in
-  let nt = pack nt (fun (_,d)->Nil) in
-  make_spaced nt;;
+  let nt = pack nt (fun (_)->[]) in
+  nt;;
+
+let d_c_a_ws = disj nt_whitespaces nt_line_comment;;
+let make_comment_and_whitespaced nt = make_paired d_c_a_ws d_c_a_ws nt;;
 
 (*3.3.1*)
 (*char list -> sexpr * char list = <fun> *)
@@ -87,8 +97,32 @@ let nt_boolean =
   let nt = pack nt (fun (x) -> (Bool x)) in
   make_spaced nt;;
 
-(*3.3.2*)
+(* 3.3.3 *)
+(* let lowercase_letters = (range 'a' 'z');; *)
 let digit = (range '0' '9');;
+let dot = char '.';;
+
+let uppercase_letters = 
+    let nt = (range_ci 'A' 'Z') in
+    let nt = pack nt lowercase_ascii in
+    nt;;
+
+let punctuation = disj_list [(char '!');(char '$');(char '^');(char '*');(char '-');(char '_');
+                            (char '=');(char '+');(char '<');(char '>');(char '/');(char '?');(char ':')];;
+
+(* char list -> char list * char list = <fun> *)
+let nt_symbol = 
+  let symbol_char_not_dot = disj_list [uppercase_letters; punctuation; digit] in
+  let symbol_char = (disj symbol_char_not_dot dot) in
+  let psc = (plus symbol_char) in
+  let scpsc = pack (caten symbol_char psc) (fun (e, es) -> (e :: es))  in
+  let nt = pack (caten symbol_char_not_dot nt_epsilon) (fun (e, es) -> (e :: es)) in
+  let nt = (disj scpsc nt) in 
+  let nt = pack nt (fun (e) -> Symbol (list_to_string e)) in
+   nt;; 
+
+(*3.3.2*)
+
 
 let rec gcd x y =  if y==0 then x else gcd y (x mod y);;
 
@@ -120,41 +154,36 @@ let nt_fraction =
 
  (* char list -> sexpr * char list = <fun>  *)
 let nt_integer = 
-  let nt = pack nt_int (fun (int) -> Number (Fraction (int,1))) in
+  let nt = not_followed_by nt_int nt_symbol in 
+  let nt = pack nt (fun (int) -> Number (Fraction (int,1))) in
   nt;;
 
-let dot = char '.';;
 
-(* char list -> sexpr * char list = <fun> *)
-let nt_float = 
+
+let nt_float_unpacked = 
   let nt = (caten nt_int (caten dot nt_natural)) in
-  let nt = pack nt (fun (int,(b,natural)) ->
-   Number (Float (float_of_string ((string_of_int int) ^ "." ^ (string_of_int natural))))) in
+  let nt = pack nt (fun (int,(b,natural)) -> float_of_string((string_of_int int) ^ "." ^ (string_of_int natural))) in
   nt;;
 
-  let nt_number = disj_list [nt_float; nt_fraction; nt_integer];;
+let nt_float = 
+  let nt = pack nt_float_unpacked (fun (num) -> Number (Float (num))) in
+  nt;;
+
+(* 4.1 *)
+let nt_scientific_notation = 
+  let e = char_ci 'e' in
+  let i_t_f = pack nt_int (fun num -> float_of_int num) in
+  let nt = disj nt_float_unpacked i_t_f in
+  let nt = caten nt (caten e i_t_f) in
+  let nt = pack nt (fun (n,(e,exp))-> let num = n *. (10. ** exp) in Number(Float(num))) in
+  nt;;
+
+  let nt_number = disj_list [nt_scientific_notation ; nt_float; nt_fraction; nt_integer];;
 
 
 
 
-(* 3.3.3 *)
-let lowercase_letters = (range 'a' 'z');;
-
-let uppercase_letters = (range_ci 'A' 'Z');;
-
-let punctuation = disj_list [(char '!');(char '$');(char '^');(char '*');(char '-');(char '_');
-                            (char '=');(char '+');(char '<');(char '>');(char '/');(char '?')];;
-
-(* char list -> char list * char list = <fun> *)
-let nt_symbol = 
-  let symbol_char_not_dot = disj_list [lowercase_letters; uppercase_letters; punctuation; digit] in
-  let symbol_char = (disj symbol_char_not_dot dot) in
-  let psc = (plus symbol_char) in
-  let scpsc = pack (caten symbol_char psc) (fun (e, es) -> (e :: es))  in
-  let nt = pack (caten symbol_char_not_dot nt_epsilon) (fun (e, es) -> (e :: es)) in
-  let nt = (disj scpsc nt) in 
-  let nt = pack nt (fun (e) -> Symbol (list_to_string e)) in
-   nt;;  
+ 
 
 
 
@@ -256,7 +285,7 @@ let rec nt_sexpr s =
                           nt_unquoted;
                           nt_unquoteAndSpliced
                           ] in 
-  (make_spaced sexpr_blocks) s
+  (make_comment_and_whitespaced sexpr_blocks) s
 
   and nt_list s =
     let nt = make_brackets (star nt_sexpr) in
@@ -293,7 +322,8 @@ let rec nt_sexpr s =
   and  nt_unquoteAndSpliced s = 
     let comma = char ',' in
     let shtrudel = char '@' in
-    let prefix = caten shtrudel comma in
+    let prefix = caten comma shtrudel  in
+    (* let prefix = pack prefix () *)
     let nt = caten prefix nt_sexpr in
     let nt = pack nt (fun (_,s) -> Pair(Symbol("unquote-splicing"), Pair(s,Nil))) in
     nt s;;
@@ -301,4 +331,26 @@ let rec nt_sexpr s =
 
 
 
+ (* let read_sexpr string = 
+  let (sexpr, s) = (nt_sexpr (string_to_list string)) in
+  if (s = [])
+  then sexpr
+  else raise X_no_match;;
 
+  let read_sexprs string = 
+    let (sexpr_list, s) = ((star nt_sexpr) (string_to_list string)) in
+    sexpr_list;;
+
+
+
+ end;; *)
+ (* let read_sexprs string =  *)
+  (* let nt = star nt_sexpr in *)
+  (* let nt = pack nt (fun ast -> ast) in *)
+  (* nt (string_to_list string);; *)
+
+  (* let read_sexprs string =
+    let (ast,s) = ((star nt_sexpr) (string_to_list string)) in
+    ast;;
+  end;; *)
+  
