@@ -187,7 +187,6 @@ let nt_string =
   let nt = pack nt (fun (_,s) -> s) in
   let nt = caten nt quote in 
   let nt = pack nt (fun (s,_)-> (String(list_to_string s))) in 
-   (* let nt = pack nt (fun(s))  *)
   make_spaced nt;;
 
 (*3.3.5*)
